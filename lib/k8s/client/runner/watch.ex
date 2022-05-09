@@ -8,6 +8,7 @@ defmodule K8s.Client.Runner.Watch do
   alias K8s.Conn
   alias K8s.Operation
   alias K8s.Operation.Error
+  require Logger
 
   @resource_version_json_path ~w(metadata resourceVersion)
 
@@ -32,6 +33,25 @@ defmodule K8s.Client.Runner.Watch do
   """
   @spec run(Conn.t(), Operation.t(), keyword()) :: Base.result_t()
   def run(%Conn{} = conn, %Operation{method: :get} = operation, http_opts) do
+    Logger.debug("Trying to run operation #{inspect(operation)}")
+    {operation, http_opts} =
+      case operation do
+        %Operation{verb: :get} ->
+          Logger.debug("Convert get operation to list operation")
+          {operation, field_selector_params} = get_to_list(operation)
+          http_opts =
+            Keyword.update(
+              http_opts,
+              :params,
+              field_selector_params,
+              &Keyword.merge(&1, field_selector_params)
+            )
+          {operation, http_opts}
+        _ ->
+          {operation, http_opts}
+      end
+
+
     case get_resource_version(conn, operation) do
       {:ok, rv} -> run(conn, operation, rv, http_opts)
       err -> err
@@ -66,6 +86,8 @@ defmodule K8s.Client.Runner.Watch do
   def run(%Conn{} = conn, %Operation{method: :get, verb: verb} = operation, rv, http_opts)
       when verb in [:list, :list_all_namespaces] do
     opts_w_watch_params = add_watch_params_to_opts(http_opts, rv)
+
+    Logger.debug("Actually running operation #{inspect(operation)} with http_opts #{inspect(opts_w_watch_params)}")
     Base.run(conn, operation, opts_w_watch_params)
   end
 
@@ -130,6 +152,7 @@ defmodule K8s.Client.Runner.Watch do
   def get_resource_version(%Conn{} = conn, %Operation{} = operation) do
     with {:ok, payload} <- Base.run(conn, operation) do
       rv = parse_resource_version(payload)
+      Logger.debug("Resource version for operation #{inspect(operation)} is #{inspect(rv)}")
       {:ok, rv}
     end
   end
