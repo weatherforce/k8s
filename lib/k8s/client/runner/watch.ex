@@ -150,7 +150,9 @@ defmodule K8s.Client.Runner.Watch do
 
   @spec get_resource_version(Conn.t(), Operation.t()) :: {:ok, binary} | Base.error_t()
   def get_resource_version(%Conn{} = conn, %Operation{} = operation) do
+    Logger.debug("Make request to get resource version for operation #{inspect(operation)}")
     with {:ok, payload} <- Base.run(conn, operation) do
+      Logger.debug("Received payload #{inspect(payload)}. Extracting resource version.")
       rv = parse_resource_version(payload)
       Logger.debug("Resource version for operation #{inspect(operation)} is #{inspect(rv)}")
       {:ok, rv}
